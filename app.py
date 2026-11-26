@@ -193,7 +193,121 @@ with tab_dashboard:
                     st.rerun()
                 st.divider()
 
+
 with tab_chat:
+    st.header("Document Question Answering")
+
+    st.caption(
+        "Search for document sections, headings, or specific information. "
+        "Matching sections are extracted directly from your PDFs."
+    )
+
+    chat_history = db.get_user_chat_history(st.session_state.username)
+
+    top_col1, top_col2 = st.columns([6, 1])
+
+    with top_col2:
+        if st.button("Clear Chat", help="Clear chat history for current user"):
+            db.clear_user_chat_history(st.session_state.username)
+            st.rerun()
+
+    # Display previous conversations.
+    for message in chat_history:
+
+        with st.chat_message(message["role"]):
+            st.markdown(message["message"])
+
+            if message["citations_json"]:
+                try:
+                    citations = json.loads(message["citations_json"])
+                except (json.JSONDecodeError, TypeError):
+                    citations = []
+
+                if citations:
+                    with st.expander("View source documents and extracted passages"):
+                        for citation in citations:
+
+                            st.markdown(
+                                f"**Source:** `{citation['filename']}`"
+                            )
+
+                            st.markdown(
+                                f"**Page:** {citation['page_number']}"
+                            )
+
+                            st.markdown(
+                                f"> {citation.get('passage', '')}"
+                            )
+
+                            st.divider()
+
+    # Accept a new question.
+    user_query = st.chat_input(
+        "Try: Introduction, Objectives, Methodology, or Conclusion..."
+    )
+
+    if user_query:
+
+        with st.chat_message("user"):
+            st.markdown(user_query)
+
+        db.save_chat_message(
+            st.session_state.username,
+            "user",
+            user_query
+        )
+
+        with st.chat_message("assistant"):
+
+            with st.spinner("Searching your documents..."):
+
+                retrieved = st.session_state.bm25_index.query(
+                    user_query,
+                    top_k=5
+                )
+
+                answer, citations = extract_answer(
+                    user_query,
+                    retrieved
+                )
+
+            if citations:
+
+                st.success("Relevant content found in your documents.")
+
+                st.markdown(answer)
+
+                with st.expander("View verified source documents"):
+
+                    for citation in citations:
+
+                        st.markdown(
+                            f"**Source:** `{citation['filename']}`"
+                        )
+
+                        st.markdown(
+                            f"**Page:** {citation['page_number']}"
+                        )
+
+                        st.markdown(
+                            f"> {citation.get('passage', '')}"
+                        )
+
+                        st.divider()
+
+            else:
+
+                st.warning("No sufficiently relevant content was found.")
+
+                st.markdown(answer)
+
+        db.save_chat_message(
+            st.session_state.username,
+            "assistant",
+            answer,
+            citations_json=json.dumps(citations)
+        )
+
     st.header("Document Question Answering")
     st.caption("Ask questions about your uploaded documents. Answers are strictly extracted with page citations.")
 
@@ -245,16 +359,30 @@ with tab_chat:
 
 with tab_about:
     st.header("About PDF Document Assistant")
-    st.markdown(
-        """
-        ### Principles of Operation
-        1. **Low Memory & Low Spec Design:** Operates comfortably within 4 GB of RAM. Text is indexed into an inverted BM25 frequency index on disk.
-        2. **100% Offline & Private:** No language model, no embedding weights, and zero network calls. Data never leaves your machine.
-        3. **Grounded & Trustworthy Extractive Answering:** Sentences are selected and presented directly from the original passages. Page numbers are preserved accurately.
-        
-        ### Important Limitations
-        - **Extractive vs. Generative:** Because this system does not run an LLM, it extracts exact sentences and passages rather than generating conversational synopses or synthesizing high-level abstract ideas across disparate chapters.
-        - **Scanned Documents (OCR):** PDFs without an embedded digital text layer (such as raw image scans) require pre-processing with an optical character recognition (OCR) utility.
-        - **Keyword Dependence:** Queries perform best when matching terms or phrasing used in the original text.
-        """
-    )
+    
+st.markdown(
+    """
+    ### Principles of Operation
+
+    1. **Low Memory Design:** Uses Python and BM25 for offline document retrieval.
+    2. **100% Offline & Private:** No external language model or cloud API is required.
+    3. **Structure-Aware Extraction:** Preserves headings and paragraph boundaries.
+    4. **Section-Based Retrieval:** Matches exact and similar headings and extracts their associated content.
+    5. **Source Verification:** Displays original PDF filenames and page references.
+
+    ### Search Capabilities
+
+    - Exact heading searches.
+    - Similar heading searches.
+    - Complete section extraction.
+    - Paragraph-level BM25 fallback.
+    - Source and page references.
+
+    ### Important Limitations
+
+    - **Scanned PDFs:** Documents without selectable text require OCR.
+    - **Heading Detection:** Unusual PDF layouts may affect heading recognition.
+    - **Extractive Search:** The application extracts original document content rather than generating new explanations.
+    - **Keyword Search:** When no suitable heading exists, paragraph retrieval depends on matching terminology.
+    """
+)
