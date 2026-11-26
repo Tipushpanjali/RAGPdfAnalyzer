@@ -308,54 +308,6 @@ with tab_chat:
             citations_json=json.dumps(citations)
         )
 
-    st.header("Document Question Answering")
-    st.caption("Ask questions about your uploaded documents. Answers are strictly extracted with page citations.")
-
-    chat_history = db.get_user_chat_history(st.session_state.username)
-
-    top_col1, top_col2 = st.columns([6, 1])
-    with top_col2:
-        if st.button("Clear Chat", help="Clear chat history for current user"):
-            db.clear_user_chat_history(st.session_state.username)
-            st.rerun()
-
-    for message in chat_history:
-        with st.chat_message(message["role"]):
-            st.markdown(message["message"])
-            if message["citations_json"]:
-                citations = json.loads(message["citations_json"])
-                if citations:
-                    with st.expander("🔍 View Verified Source Citations & Passages"):
-                        for c in citations:
-                            st.markdown(f"**Source:** `{c['filename']}` — **Page {c['page_number']}**")
-                            st.markdown(f"> {c.get('passage', '')}")
-                            st.write("---")
-
-    user_query = st.chat_input("Ask a question based on your uploaded PDFs...")
-    if user_query:
-        with st.chat_message("user"):
-            st.markdown(user_query)
-        db.save_chat_message(st.session_state.username, "user", user_query)
-
-        with st.spinner("Searching indexed documents..."):
-            retrieved = st.session_state.bm25_index.query(user_query, top_k=5)
-            answer, citations = extract_answer(user_query, retrieved)
-
-        with st.chat_message("assistant"):
-            st.markdown(answer)
-            if citations:
-                with st.expander("🔍 View Verified Source Citations & Passages"):
-                    for c in citations:
-                        st.markdown(f"**Source:** `{c['filename']}` — **Page {c['page_number']}**")
-                        st.markdown(f"> {c.get('passage', '')}")
-                        st.write("---")
-
-        db.save_chat_message(
-            st.session_state.username,
-            "assistant",
-            answer,
-            citations_json=json.dumps(citations)
-        )
 
 with tab_about:
     st.header("About PDF Document Assistant")
